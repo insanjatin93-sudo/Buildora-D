@@ -66,157 +66,75 @@ const chatbotConfig = {
   email: 'Buildoradigitalonline@gmail.com'
 };
 
-const chatbotStorageKeys = {
-  customKnowledge: 'buildora.chatbot.customKnowledge.v1'
-};
-
-const defaultChatbotKnowledge = [
-  {
-    keys: ['hi', 'hello', 'hey'],
-    reply: 'Hello. I can help with Buildora services, pricing, and project timelines. What do you need?'
-  },
-  {
-    keys: ['services', 'service', 'offer'],
-    reply: 'We provide AI Automation, Website Development, Digital Marketing, and Social Media Management.'
-  },
-  {
-    keys: ['price', 'pricing', 'cost', 'budget'],
-    reply: 'Pricing depends on scope and timeline. Share your goal and I can direct you to the fastest quote route.'
-  },
-  {
-    keys: ['website', 'web development', 'site'],
-    reply: 'We build responsive, conversion-focused websites. Typical first version timeline is 1 to 3 weeks based on scope.'
-  },
-  {
-    keys: ['automation', 'ai'],
-    reply: 'Our AI automation setups reduce repetitive work and improve lead response speed using practical workflows.'
-  },
-  {
-    keys: ['marketing', 'ads', 'seo'],
-    reply: 'Our marketing work focuses on lead quality, tracking, and revenue growth across channels.'
-  },
-  {
-    keys: ['social', 'instagram', 'content'],
-    reply: 'We handle content planning, posting consistency, and performance-based social growth strategy.'
-  },
-  {
-    keys: ['contact', 'call', 'whatsapp'],
-    reply: 'Best route is WhatsApp for quick response. You can also contact us by email if preferred.'
-  },
-  {
-    keys: ['email'],
-    reply: `You can email us at ${chatbotConfig.email}.`
-  },
-  {
-    keys: ['thanks', 'thank you'],
-    reply: 'You are welcome. If you share your business type, I can suggest the best starting service.'
-  }
-];
-
-let chatbotKnowledgeBase = [...defaultChatbotKnowledge];
-
-function normalizeKnowledgeEntries(entries) {
-  if (!Array.isArray(entries)) {
-    return [];
-  }
-
-  return entries
-    .map((entry) => {
-      const keys = Array.isArray(entry?.keys)
-        ? entry.keys.map((key) => String(key).trim().toLowerCase()).filter(Boolean)
-        : [];
-      const reply = typeof entry?.reply === 'string' ? entry.reply.trim() : '';
-      if (!keys.length || !reply) {
-        return null;
+function buildSiteKnowledge() {
+  const serviceSelectors = ['article h3', '#services h3', 'h3'];
+  const services = [];
+  serviceSelectors.forEach((selector) => {
+    document.querySelectorAll(selector).forEach((el) => {
+      const text = (el.textContent || '').trim();
+      if (text && text.length < 60 && !services.includes(text)) {
+        services.push(text);
       }
-      return { keys, reply };
-    })
-    .filter(Boolean);
+    });
+  });
+
+  const filteredServices = services
+    .filter((item) =>
+      ['automation', 'website', 'marketing', 'social'].some((token) =>
+        item.toLowerCase().includes(token)
+      )
+    )
+    .slice(0, 6);
+
+  const projectNames = Array.from(document.querySelectorAll('article h3'))
+    .map((el) => (el.textContent || '').trim())
+    .filter((text) => text && text.length < 40)
+    .slice(0, 3);
+
+  return {
+    services:
+      filteredServices.length > 0
+        ? filteredServices
+        : ['AI Automation', 'Website Development', 'Digital Marketing', 'Social Media Management'],
+    projects: projectNames
+  };
 }
 
-function mergeKnowledge(entries) {
-  const normalized = normalizeKnowledgeEntries(entries);
-  if (!normalized.length) {
-    return;
-  }
-  chatbotKnowledgeBase = [...chatbotKnowledgeBase, ...normalized];
-}
+function getChatbotReply(message, siteKnowledge) {
+  const text = message.toLowerCase();
+  const servicesLine = siteKnowledge.services.join(', ');
+  const projectsLine =
+    siteKnowledge.projects.length > 0 ? ` Recent projects: ${siteKnowledge.projects.join(', ')}.` : '';
 
-function getStoredCustomKnowledge() {
-  try {
-    const raw = window.localStorage.getItem(chatbotStorageKeys.customKnowledge);
-    if (!raw) {
-      return [];
-    }
-    return normalizeKnowledgeEntries(JSON.parse(raw));
-  } catch (error) {
-    return [];
-  }
-}
-
-function saveCustomKnowledge(entries) {
-  try {
-    window.localStorage.setItem(chatbotStorageKeys.customKnowledge, JSON.stringify(entries));
-  } catch (error) {
-    // Ignore storage errors and keep chatbot functional.
-  }
-}
-
-async function loadKnowledgeFile() {
-  try {
-    const scriptElement = Array.from(document.scripts).find((script) =>
-      script.src.endsWith('/assets/js/main.js') || script.src.endsWith('assets/js/main.js')
-    );
-    const knowledgeFileUrl = scriptElement
-      ? new URL('../data/chatbot-knowledge.json', scriptElement.src).toString()
-      : 'assets/data/chatbot-knowledge.json';
-    const response = await fetch(knowledgeFileUrl, { cache: 'no-store' });
-    if (!response.ok) {
-      return [];
-    }
-    return normalizeKnowledgeEntries(await response.json());
-  } catch (error) {
-    return [];
-  }
-}
-
-async function initializeChatbotKnowledge() {
-  chatbotKnowledgeBase = [...defaultChatbotKnowledge];
-  mergeKnowledge(await loadKnowledgeFile());
-  mergeKnowledge(getStoredCustomKnowledge());
-}
-
-function getChatbotReply(message) {
-  const normalizedMessage = message.toLowerCase();
-  const matchedResponse = chatbotKnowledgeBase.find((entry) =>
-    entry.keys.some((key) => normalizedMessage.includes(key))
-  );
-
-  if (matchedResponse) {
-    return matchedResponse.reply;
+  if (['hi', 'hello', 'hey'].some((item) => text.includes(item))) {
+    return `Hello. We offer ${servicesLine}.${projectsLine} Share your requirement and then continue on WhatsApp for a quick quote.`;
   }
 
-  return 'I can help with services, pricing, and timelines. For a fast response from the team, use the WhatsApp button below.';
-}
-
-function parseTrainingCommand(message) {
-  const payload = message.replace(/^\/train\s+/i, '').trim();
-  if (!payload.includes('|')) {
-    return null;
+  if (['service', 'offer', 'do you provide', 'what do you do'].some((item) => text.includes(item))) {
+    return `From our website, core services are: ${servicesLine}. For exact scope and pricing, continue on WhatsApp.`;
   }
 
-  const [rawKeys, ...rawReplyParts] = payload.split('|');
-  const keys = rawKeys
-    .split(',')
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-  const reply = rawReplyParts.join('|').trim();
-
-  if (!keys.length || !reply) {
-    return null;
+  if (['price', 'pricing', 'cost', 'budget', 'quote'].some((item) => text.includes(item))) {
+    return 'Pricing depends on project scope. Click WhatsApp below and send your requirement to get a fast quote.';
   }
 
-  return { keys, reply };
+  if (['website', 'web', 'development'].some((item) => text.includes(item))) {
+    return 'We build responsive, conversion-focused websites. Share your business details on WhatsApp and we will suggest the best plan.';
+  }
+
+  if (['automation', 'ai'].some((item) => text.includes(item))) {
+    return 'We provide AI automation to reduce repetitive tasks and improve lead response. Continue on WhatsApp for a custom workflow plan.';
+  }
+
+  if (['marketing', 'ads', 'seo', 'social'].some((item) => text.includes(item))) {
+    return 'We run growth-focused digital marketing and social media systems. Continue on WhatsApp and we will share the right strategy for your niche.';
+  }
+
+  if (['contact', 'phone', 'call', 'whatsapp'].some((item) => text.includes(item))) {
+    return 'Use the WhatsApp button below to chat with our team directly. That is the fastest response channel.';
+  }
+
+  return `I can answer from our site services: ${servicesLine}. For exact details, continue on WhatsApp using the button below.`;
 }
 
 function createChatbotWidget() {
@@ -251,6 +169,7 @@ function createChatbotWidget() {
 
   const whatsappLink = `https://wa.me/${chatbotConfig.phoneNumber}`;
   const emailLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(chatbotConfig.email)}`;
+  const siteKnowledge = buildSiteKnowledge();
 
   const root = document.createElement('div');
   root.id = 'buildora-chatbot-root';
@@ -290,7 +209,7 @@ function createChatbotWidget() {
   };
 
   appendMessage('Hi, welcome to Buildora Digital. Ask me about services, price, or timelines.', 'bot');
-  appendMessage('Training: use /train key1,key2 | your reply text', 'bot');
+  appendMessage('For quick conversion, continue on WhatsApp using the button below.', 'bot');
 
   toggleButton.addEventListener('click', () => {
     panel.classList.toggle('open');
@@ -302,37 +221,15 @@ function createChatbotWidget() {
     }
   });
 
-  const sendMessage = async () => {
+  const sendMessage = () => {
     const text = input.value.trim();
     if (!text) {
       return;
     }
     appendMessage(text, 'user');
     input.value = '';
-
-    if (text.toLowerCase().startsWith('/train ')) {
-      const trainedEntry = parseTrainingCommand(text);
-      if (!trainedEntry) {
-        appendMessage('Invalid format. Use /train key1,key2 | your reply text', 'bot');
-        return;
-      }
-
-      const customKnowledge = getStoredCustomKnowledge();
-      customKnowledge.push(trainedEntry);
-      saveCustomKnowledge(customKnowledge);
-      mergeKnowledge([trainedEntry]);
-      appendMessage('Saved. I learned that response.', 'bot');
-      return;
-    }
-
-    if (text.toLowerCase() === '/help') {
-      appendMessage('Use /train key1,key2 | reply to teach me custom responses.', 'bot');
-      return;
-    }
-
-    await initializePromise;
     window.setTimeout(() => {
-      appendMessage(getChatbotReply(text), 'bot');
+      appendMessage(getChatbotReply(text, siteKnowledge), 'bot');
     }, 260);
   };
 
@@ -344,8 +241,6 @@ function createChatbotWidget() {
     }
   });
 }
-
-const initializePromise = initializeChatbotKnowledge();
 
 if (document.body) {
   createChatbotWidget();
